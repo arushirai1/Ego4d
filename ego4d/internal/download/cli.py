@@ -19,9 +19,18 @@ from iopath.common.file_io import PathManager
 from iopath.common.s3 import S3PathHandler
 from tqdm.auto import tqdm
 
+# added
+from pathlib import Path
+import json
+
 T = TypeVar("T")
 U = TypeVar("U")
 
+takes = None
+if Path('/ix/akovashka/arr159/exoego/takes.json').exists():
+    with open('/ix/akovashka/arr159/exoego/takes.json', 'r') as f:
+        takes = json.load(f)
+    takes_by_uid = {t["take_uid"]: t for t in takes}
 
 # TODO: remove iopath dependency
 def _create_pathmgr(s3_profile: Optional[str]):
@@ -68,8 +77,18 @@ def _manifest_ok(m: ManifestEntry, args) -> bool:
         ok = False
     if args.uids is not None and m.uid is not None and len({m.uid} & args.uids) == 0:
         ok = False
+
     return ok
 
+def _prune_best_exo(m: ManifestEntry):
+    # should move into _path_ok
+    assert takes is not None
+    best_exo = takes_by_uid[m.uid] ['best_exo']
+    best_exo = 'cam01' if best_exo is None else best_exo # default
+    for path in m.paths:
+        if path.source_path.endswith(best_exo+'.mp4'):
+            return path
+    assert False
 
 def map_all(
     values: List[T],
@@ -243,16 +262,17 @@ If you meant to download the public release, please use the script `ego4d/egoexo
         if not pathmgr.exists(manifest_path):
             part_errs.append(part)
             continue
-
         ms = manifest_loads(pathmgr.open(manifest_path).read())
         valid_benchmark_names.update({b for m in ms for b in m.benchmarks or []})
         for m in ms:
             num_paths += len(m.paths)
             if not _manifest_ok(m, args):
                 continue
-
-            all_paths.extend([p for p in m.paths if _path_ok(p, args)])
-
+            if False:
+                all_paths.extend([p for p in m.paths if _path_ok(p, args)])
+            else:
+                best_exo_path = _prune_best_exo(m)
+                all_paths.append(best_exo_path)
     print("Done", flush=True)
 
     invalid_benchmarks = (
@@ -300,7 +320,6 @@ If you are located in China, please try using a VPN. Please refer to these posts
 
     path_size_pairs = [(x, x.size) for x in all_paths if x.size is not None]
     not_cached_paths = [x for x in all_paths if x.size is None]
-
     if len(not_cached_paths) > 0:
         print("Determining what to download ...")
         extra_path_size_pairs, s3_stat_failures = map_all(
