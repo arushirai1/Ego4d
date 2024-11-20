@@ -31,6 +31,7 @@ if Path('/ix/akovashka/arr159/exoego/takes.json').exists():
     with open('/ix/akovashka/arr159/exoego/takes.json', 'r') as f:
         takes = json.load(f)
     takes_by_uid = {t["take_uid"]: t for t in takes}
+    valid_take_list = [t["take_uid"] for t in takes if t['parent_task_name'] in ['Basketball', 'Rock Climbing', 'Soccer']]
 
 # TODO: remove iopath dependency
 def _create_pathmgr(s3_profile: Optional[str]):
@@ -77,7 +78,8 @@ def _manifest_ok(m: ManifestEntry, args) -> bool:
         ok = False
     if args.uids is not None and m.uid is not None and len({m.uid} & args.uids) == 0:
         ok = False
-
+    if m.uid not in valid_take_list: # TODO MAKE THIS AN ARGUMENT
+        ok = False
     return ok
 
 def _prune_best_exo(m: ManifestEntry):
